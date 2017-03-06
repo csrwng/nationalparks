@@ -14,13 +14,8 @@ def baseProject=""               // name of base project - used when testing a P
 def project=""                   // project where build and deploy will occur
 def projectCreated=false         // true if a project was created by this build and needs to be cleaned up
 def repoUrl=""                   // the URL of this project's repository
+def commitHash=""                // hash of the git commit being tested
 
-// uniqueName returns a name with a 16-character random character suffix
-def uniqueName = { String prefix ->
-  sh "cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 16 | head -n 1 > suffix"
-  suffix = readFile("suffix").trim()
-  return prefix + suffix
-}
 
 // setBuildStatus sets a status item on a GitHub commit
 def setBuildStatus = { String url, String context, String message, String state, String backref ->
@@ -37,15 +32,18 @@ def setBuildStatus = { String url, String context, String message, String state,
 
 // getRepoURL retrieves the origin URL of the current source repository
 def getRepoURL = {
-  sh "git config --get remote.origin.url > originurl"
-  return readFile("originurl").trim()
+  return sh(script:"git config --get remote.origin.url > originurl",returnStdout:true).trim()
+}
+
+// getCommitHash returns the hash of the commit being tested
+def getCommitHash = {
+  return sh(script:"git rev-parse HEAD", returnStdout: true).trim()
 }
 
 // getRouteHostname retrieves the host name from the given route in an
 // OpenShift namespace
 def getRouteHostname = { String routeName, String projectName ->
-  sh "oc get route ${routeName} -n ${projectName} -o jsonpath='{ .spec.host }' > apphost"
-  return readFile("apphost").trim()
+  return sh(script:"oc get route ${routeName} -n ${projectName} -o jsonpath='{ .spec.host }'",returnStdout:true).trim()
 }
 
 // Initialize variables in default node context
@@ -62,6 +60,7 @@ try { // Use a try block to perform cleanup in a finally block when the build fa
     stage ('Checkout') {
       checkout scm
       repoUrl = getRepoURL()
+      commitHash = getCommitHash()
       stash includes: "ose3/pipeline-*.json", name: "artifact-template"
     }
 
@@ -71,7 +70,7 @@ try { // Use a try block to perform cleanup in a finally block when the build fa
       stage ('Create PR Project') {
         setBuildStatus(repoUrl, "ci/app-preview", "Building application", "PENDING", "")
         setBuildStatus(repoUrl, "ci/approve", "Aprove after testing", "PENDING", "") 
-        project = uniqueName("${appName}-")
+        project = "${appName}-${commitHash.substring(0,7)}"
         sh "oc new-project ${project}"
         projectCreated=true
         sh "oc create serviceaccount jenkins -n ${project}"
