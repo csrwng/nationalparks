@@ -21,7 +21,7 @@ def commitHash=""                // hash of the git commit being tested
 def setBuildStatus = { String url, String context, String message, String state, String backref ->
   step([
     $class: "GitHubCommitStatusSetter",
-    reposSource: [$class: "ManuallyEnteredRepositorySource", url: url ],
+    reposSource: [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/cw-paas-dev/nationalparks.git" ],
     contextSource: [$class: "ManuallyEnteredCommitContextSource", context: context ],
     errorHandlers: [[$class: "ChangingBuildStatusErrorHandler", result: "UNSTABLE"]],
     statusBackrefSource: [ $class: "ManuallyEnteredBackrefSource", backref: backref ],
@@ -69,7 +69,6 @@ try { // Use a try block to perform cleanup in a finally block when the build fa
     if (isPR) {
       stage ('Create PR Project') {
         setBuildStatus(repoUrl, "ci/app-preview", "Building application", "PENDING", "")
-        setBuildStatus(repoUrl, "ci/approve", "Aprove after testing", "PENDING", "") 
         project = "${appName}-${commitHash.substring(0,7)}"
         sh "oc new-project ${project}"
         projectCreated=true
@@ -123,12 +122,10 @@ try { // Use a try block to perform cleanup in a finally block when the build fa
       }
       def appHostName = getRouteHostname(previewAppName, project)
       setBuildStatus(repoUrl, "ci/app-preview", "The application is available", "SUCCESS", "http://${appHostName}")
-      setBuildStatus(repoUrl, "ci/approve", "Approve after testing", "PENDING", "${env.BUILD_URL}input/") 
       stage ('Manual Test') {
         input "Is everything OK?"
       }
       setBuildStatus(repoUrl, "ci/app-preview", "Application previewed", "SUCCESS", "")
-      setBuildStatus(repoUrl, "ci/approve", "Manually approved", "SUCCESS", "")
     }
   }
 } 
